@@ -13,7 +13,32 @@ def decision_step(Rover):
     # Check if we have vision data to make decisions with
     if Rover.nav_angles is not None:
         # Check for Rover.mode status
-        if Rover.mode == 'forward': 
+        if Rover.picking_up == 1:
+            Rover.throttle = 0
+            Rover.steer = 0
+            Rover.brake = Rover.brake_set
+            Rover.mode = 'stop'
+
+        elif Rover.near_sample == 1:
+            Rover.brake = Rover.brake_set
+            Rover.mode = 'stop'
+            Rover.steer = 0
+            Rover.send_pickup = True
+            Rover.samples_to_find += 1
+            
+            
+        elif Rover.mode == 'rock_visible':
+            if Rover.vel < Rover.max_vel:
+                # Set throttle value to throttle setting
+                Rover.throttle = Rover.throttle_set
+            else: # Else coast
+                Rover.throttle = 0
+            Rover.brake = 0
+            # Set steering to average angle clipped to the range +/- 15
+            Rover.steer = np.clip(np.mean(Rover.nav_angles * 180/np.pi), -15, 15)
+
+
+        elif Rover.mode == 'forward': 
             # Check the extent of navigable terrain
             if len(Rover.nav_angles) >= Rover.stop_forward:  
                 # If mode is forward, navigable terrain looks good 
@@ -68,8 +93,8 @@ def decision_step(Rover):
         Rover.brake = 0
         
     # If in a state where want to pickup a rock send pickup command
-    if Rover.near_sample and Rover.vel == 0 and not Rover.picking_up:
-        Rover.send_pickup = True
+    #if Rover.near_sample and Rover.vel == 0 and not Rover.picking_up:
+     #   Rover.send_pickup = True
     
     return Rover
 

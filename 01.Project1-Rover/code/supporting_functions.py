@@ -21,7 +21,7 @@ def update_rover(Rover, data):
             samples_xpos = np.int_([convert_to_float(pos.strip()) for pos in data["samples_x"].split(';')])
             samples_ypos = np.int_([convert_to_float(pos.strip()) for pos in data["samples_y"].split(';')])
             Rover.samples_pos = (samples_xpos, samples_ypos)
-            Rover.samples_to_find = np.int(data["sample_count"])
+            Rover.samples_found = np.zeros((len(Rover.samples_pos[0]))).astype(np.int)
       # Or just update elapsed time
       else:
             tot_time = time.time() - Rover.start_time
@@ -47,14 +47,10 @@ def update_rover(Rover, data):
       Rover.near_sample = np.int(data["near_sample"])
       # Picking up flag
       Rover.picking_up = np.int(data["picking_up"])
-      # Update number of rocks collected
-      Rover.samples_collected = Rover.samples_to_find - np.int(data["sample_count"])
-
+      
       print('speed =',Rover.vel, 'position =', Rover.pos, 'throttle =', 
-      Rover.throttle, 'steer_angle =', Rover.steer, 'near_sample:', Rover.near_sample, 
-      'picking_up:', data["picking_up"], 'sending pickup:', Rover.send_pickup, 
-      'total time:', Rover.total_time, 'samples remaining:', data["sample_count"], 
-      'samples collected:', Rover.samples_collected)
+      Rover.throttle, 'steer_angle =', Rover.steer, 'near_sample', Rover.near_sample, 
+      'picking_up', data["picking_up"])
       # Get the current image from the center camera of the rover
       imgString = data["image"]
       image = Image.open(BytesIO(base64.b64decode(imgString)))
@@ -72,6 +68,7 @@ def create_output_images(Rover):
             navigable = Rover.worldmap[:,:,2] * (255 / np.mean(Rover.worldmap[nav_pix, 2]))
       else: 
             navigable = Rover.worldmap[:,:,2]
+
       if np.max(Rover.worldmap[:,:,0]) > 0:
             obs_pix = Rover.worldmap[:,:,0] > 0
             obstacle = Rover.worldmap[:,:,0] * (255 / np.mean(Rover.worldmap[obs_pix, 0]))
@@ -91,11 +88,9 @@ def create_output_images(Rover):
       rock_world_pos = Rover.worldmap[:,:,1].nonzero()
       # If there are, we'll step through the known sample positions
       # to confirm whether detections are real
-      samples_located = 0
       if rock_world_pos[0].any():
-            
             rock_size = 2
-            for idx in range(len(Rover.samples_pos[0])):
+            for idx in range(len(Rover.samples_pos[0]) - 1):
                   test_rock_x = Rover.samples_pos[0][idx]
                   test_rock_y = Rover.samples_pos[1][idx]
                   rock_sample_dists = np.sqrt((test_rock_x - rock_world_pos[1])**2 + \
@@ -104,7 +99,7 @@ def create_output_images(Rover):
                   # consider it a success and plot the location of the known
                   # sample on the map
                   if np.min(rock_sample_dists) < 3:
-                        samples_located += 1
+                        Rover.samples_found[idx] = 1
                         map_add[test_rock_y-rock_size:test_rock_y+rock_size, 
                         test_rock_x-rock_size:test_rock_x+rock_size, :] = 255
 
@@ -134,12 +129,13 @@ def create_output_images(Rover):
                   cv2.FONT_HERSHEY_COMPLEX, 0.4, (255, 255, 255), 1)
       cv2.putText(map_add,"Fidelity: "+str(fidelity)+'%', (0, 40), 
                   cv2.FONT_HERSHEY_COMPLEX, 0.4, (255, 255, 255), 1)
-      cv2.putText(map_add,"Rocks", (0, 55), 
+      cv2.putText(map_add,"Rocks Found: "+str(np.sum(Rover.samples_found)), (0, 55), 
                   cv2.FONT_HERSHEY_COMPLEX, 0.4, (255, 255, 255), 1)
-      cv2.putText(map_add,"  Located: "+str(samples_located), (0, 70), 
+      cv2.putText(map_add,"Rover Roll: "+str(np.sum(Rover.roll)), (0, 70), 
                   cv2.FONT_HERSHEY_COMPLEX, 0.4, (255, 255, 255), 1)
-      cv2.putText(map_add,"  Collected: "+str(Rover.samples_collected), (0, 85), 
+      cv2.putText(map_add,"Rover Pitch: "+str(np.sum(Rover.pitch)), (0, 85), 
                   cv2.FONT_HERSHEY_COMPLEX, 0.4, (255, 255, 255), 1)
+
       # Convert map and vision image to base64 strings for sending to server
       pil_img = Image.fromarray(map_add.astype(np.uint8))
       buff = BytesIO()
